@@ -373,63 +373,68 @@ def limpar_texto(valor):
     return str(valor).strip().lower()
 
 
-def validar_login(usuario, senha):
-    df_usuarios = carregar_usuarios()
+def validar_login(email, senha):
+    supabase = conectar_supabase()
 
-    colunas_obrigatorias = ["Usuário", "Nome", "Senha", "Perfil", "Ativo"]
+    try:
+        auth_res = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": senha
+        })
 
-    for coluna in colunas_obrigatorias:
-        if coluna not in df_usuarios.columns:
-            st.error(f"A coluna '{coluna}' não foi encontrada na aba Usuários.")
+        user = auth_res.user
+
+        if not user:
             return None
 
-    usuario_digitado = limpar_texto(usuario)
-    senha_digitada = str(senha).strip()
+        perfil_res = (
+            supabase
+            .table("perfis_de_acesso")
+            .select("*")
+            .eq("id_do_usuario_auth", user.id)
+            .eq("ativo", True)
+            .execute()
+        )
 
-    df_usuarios["Usuário_temp"] = df_usuarios["Usuário"].apply(limpar_texto)
-    df_usuarios["Ativo_temp"] = df_usuarios["Ativo"].apply(limpar_texto)
+        if not perfil_res.data:
+            st.error("Usuário autenticado, mas sem perfil de acesso ativo.")
+            return None
 
-    usuario_encontrado = df_usuarios[
-        (df_usuarios["Usuário_temp"] == usuario_digitado) &
-        (df_usuarios["Ativo_temp"].isin(["sim", "s", "ativo", "1", "true"]))
-    ]
+        dados_perfil = perfil_res.data[0]
 
-    if usuario_encontrado.empty:
+        return {
+            "usuario": dados_perfil.get("email", email),
+            "nome": dados_perfil.get("nome", email),
+            "perfil": limpar_texto(dados_perfil.get("perfil", "")),
+            "auth_user_id": user.id
+        }
+
+    except Exception as e:
+        st.error(f"Erro ao fazer login: {e}")
         return None
-
-    dados_usuario = usuario_encontrado.iloc[0]
-
-    if str(dados_usuario["Senha"]).strip() != senha_digitada:
-        return None
-
-    return {
-        "usuario": dados_usuario["Usuário"],
-        "nome": dados_usuario["Nome"],
-        "perfil": limpar_texto(dados_usuario["Perfil"])
-    }
 
 
 def tela_login():
     st.title("🛒 Sistema de Compras")
-    st.caption("Acesse com seu usuário e senha.")
+    st.caption("Acesse com seu e-mail e senha.")
 
     with st.form("form_login"):
-        usuario = st.text_input("Usuário")
+        email = st.text_input("E-mail")
         senha = st.text_input("Senha", type="password")
         entrar = st.form_submit_button("Entrar")
 
     if entrar:
-        dados_usuario = validar_login(usuario, senha)
+        dados_usuario = validar_login(email, senha)
 
         if dados_usuario:
             st.session_state["logado"] = True
             st.session_state["usuario"] = dados_usuario["usuario"]
             st.session_state["nome"] = dados_usuario["nome"]
             st.session_state["perfil"] = dados_usuario["perfil"]
+            st.session_state["auth_user_id"] = dados_usuario["auth_user_id"]
             st.rerun()
         else:
-            st.error("Usuário ou senha inválidos, ou usuário inativo.")
-
+            st.error("E-mail ou senha inválidos, ou usuário sem acesso ativo.")
 
 def logout():
     if st.sidebar.button("Sair"):
