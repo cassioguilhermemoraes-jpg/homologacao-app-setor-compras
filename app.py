@@ -4,10 +4,12 @@ from supabase import create_client
 
 st.set_page_config(page_title="Teste Supabase", layout="wide")
 
+st.write("URL configurada:", st.secrets["SUPABASE_URL"])
+
 @st.cache_resource
 def get_supabase_client():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_ANON_KEY"]
+    url = st.secrets["SUPABASE_URL"].strip()
+    key = st.secrets["SUPABASE_ANON_KEY"].strip()
     return create_client(url, key)
 
 supabase = get_supabase_client()
